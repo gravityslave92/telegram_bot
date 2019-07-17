@@ -17,8 +17,6 @@ type Application struct {
 	Bot      *tgbotapi.BotAPI
 }
 
-const botID = "784720809:AAGQBCIdvrtzbCLW2pxwHt1j0N93bUiMlfU"
-
 func NewApplication() *Application {
 	dir, _ := os.Getwd()
 	logsPath := filepath.Join(dir, "logs")
@@ -36,9 +34,7 @@ func NewApplication() *Application {
 	}
 	// setup proxy for telegram bot connection
 	client := setupProxyClient()
-	// @todo
-	//bot, err := tgbotapi.NewBotAPIWithClient(os.Getenv("BOT_ID"), client)
-	bot, err := tgbotapi.NewBotAPIWithClient(botID, client)
+	bot, err := tgbotapi.NewBotAPIWithClient(os.Getenv("BOT_ID"), client)
 	if err != nil {
 		app.ErrorLog.Fatalf("Error while connecting to telegram bot: %s", err)
 	}
@@ -61,24 +57,24 @@ func newLogger(prefix, logsPath string) *log.Logger {
 
 // setup proxy from package to avoid restrictions
 func setupProxyClient() *http.Client {
-	proxyStr := "//180.183.19.142:8080"
+	proxyStr := os.Getenv("PROXY_URL")
 	proxyUrl, err := url.Parse(proxyStr)
 	if err != nil {
 		log.Fatalf("error parsing proxy %s: %v", proxyStr, err)
 	}
 	transport := &http.Transport{Proxy: http.ProxyURL(proxyUrl)}
-	
+
 	return &http.Client{
 		Transport: transport,
 	}
 }
 
 func (app *Application) InfoPrintF(format string, v ...interface{}) {
-	app.InfoLog.Printf(format, v)
+	app.InfoLog.Printf(format, v...)
 }
 
 func (app *Application) ErrorPrintF(format string, v ...interface{}) {
-	app.ErrorLog.Printf(format, v)
+	app.ErrorLog.Printf(format, v...)
 }
 
 func (app *Application) BotSend(c tgbotapi.Chattable) (msg tgbotapi.Message, err error) {

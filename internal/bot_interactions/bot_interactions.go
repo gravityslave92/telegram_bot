@@ -14,8 +14,6 @@ import (
 	"unicode/utf8"
 )
 
-const botID = "784720809:AAGQBCIdvrtzbCLW2pxwHt1j0N93bUiMlfU"
-
 type botApplication interface {
 	InfoPrintF(string, ...interface{})
 	ErrorPrintF(string, ...interface{})
@@ -24,16 +22,23 @@ type botApplication interface {
 	BotClientGet(string) (*http.Response, error)
 }
 
+// exported for testing purpose
+var (
+	BuildResultMessage = buildResultMsg
+	ParseLimitFromMsg  = parseLimitFromMsg
+)
+
 // exported for main()
 func StartBotChat() {
 	app := application.NewApplication()
+	// telegram updates settings
+	updateConf := tgbotapi.NewUpdate(0)
+	updateConf.Timeout = 60
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates, err := app.Bot.GetUpdatesChan(u)
+	updates, err := app.Bot.GetUpdatesChan(updateConf)
 	if err != nil {
-		app.ErrorLog.Fatalf("error while connecting to channel updates: %v", err)
+		app.ErrorPrintF("error while connecting to channel updates: %v", err)
+		os.Exit(1)
 	}
 	for update := range updates {
 		userMessage := update.Message
@@ -44,7 +49,7 @@ func StartBotChat() {
 		msg := tgbotapi.NewMessage(userMessage.Chat.ID, "")
 		if userMessage.IsCommand() {
 			userCmd := userMessage.Command()
-			app.InfoLog.Printf("%s command has been requested!", userCmd)
+			app.InfoPrintF("%s command has been requested!", userCmd)
 
 			switch userCmd {
 			case "help":
@@ -60,7 +65,7 @@ func StartBotChat() {
 			}
 		}
 
-		app.InfoLog.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
+		app.InfoPrintF("[%s] %s", update.Message.From.UserName, update.Message.Text)
 
 		msg.ReplyToMessageID = userMessage.MessageID
 		app.BotSend(msg)
@@ -83,7 +88,7 @@ func processUserRequest(app botApplication, updates tgbotapi.UpdatesChannel, msg
 		app.BotSend(msg)
 
 		limitMsg := <-updates
-		limit, err := parseLimitFromMsg(limitMsg)
+		limit, err := parseLimitFromMsg(limitMsg.Message.Text)
 		if err != nil {
 			app.ErrorPrintF("error while parsing limit value from message: %v", err)
 			msg.Text = err.Error()
@@ -157,13 +162,13 @@ func processUrlsWithLimit(app botApplication, urlsCh <-chan string, resultCh cha
 			}
 			defer resp.Body.Close()
 
-			bytesResp, err := ioutil.ReadAll(resp.Body)
+			respBody, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				app.ErrorPrintF("error occured while reading response from %s: %v", urlString, err)
 				return
 			}
 			// send result string to output chan
-			resultCh <- fmt.Sprintf("%s: %d\n", urlString, utf8.RuneCount(bytesResp))
+			resultCh <- fmt.Sprintf("%s: %d\n", urlString, utf8.RuneCount(respBody))
 
 			return
 		}(url)
@@ -174,13 +179,12 @@ func processUrlsWithLimit(app botApplication, urlsCh <-chan string, resultCh cha
 	close(resultCh)
 }
 
-func parseLimitFromMsg(limitMsg tgbotapi.Update) (int, error) {
-	limitStr := limitMsg.Message.Text
-	if limitStr == "" {
+func parseLimitFromMsg(msg string) (int, error) {
+	if msg == "" {
 		return 0, fmt.Errorf("invalid value provided! must be of type int")
 	}
 
-	limit, err := strconv.Atoi(limitStr)
+	limit, err := strconv.Atoi(msg)
 	if err != nil {
 		return 0, err
 	}
